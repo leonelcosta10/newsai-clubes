@@ -1,0 +1,7 @@
+requests==2.34.2
+beautifulsoup4==4.15.0
+lxml==6.1.2
+feedparser==6.0.14
+python-dotenv==1.2.3
+Telethon==1.44.0
+google-genai==2.19.0

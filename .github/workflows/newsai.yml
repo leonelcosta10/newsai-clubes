@@ -1,0 +1,50 @@
+name: NewsAI Pipeline
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: newsai-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Checkout dos dados (repositório privado)
+        uses: actions/checkout@v4
+        with:
+          repository: leonelcosta10/newsai-clubes-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Correr o pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELETHON_API_ID: ${{ secrets.TELETHON_API_ID }}
+          TELETHON_API_HASH: ${{ secrets.TELETHON_API_HASH }}
+          TELETHON_STRING_SESSION: ${{ secrets.TELETHON_STRING_SESSION }}
+        run: python main.py
+
+      - name: Guardar estado no repositório privado de dados
+        working-directory: data
+        run: |
+          git config user.name "NewsAI Bot"
+          git config user.email "actions@github.com"
+          git add seen_articles.db recipients.json telegram_update_offset.txt
+          git diff --staged --quiet || git commit -m "Atualiza estado do pipeline [skip ci]"
+          git push

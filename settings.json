@@ -1,0 +1,15 @@
+{
+  "clubs": {
+    "fc_porto": true,
+    "benfica": false,
+    "sporting": false
+  },
+  "sources": {
+    "ojogo": true,
+    "abola": true,
+    "record": true,
+    "dimarzio": true,
+    "fabrizio_telegram": true,
+    "athletic": true
+  }
+}
