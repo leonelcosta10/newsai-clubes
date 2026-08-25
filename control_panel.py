@@ -1,5 +1,5 @@
-"""Painel de controlo simples: ativar/desativar a tarefa agendada, escolher
-clubes/fontes ativos, e correr o pipeline manualmente."""
+"""Painel de controlo simples: ativar/desativar as tarefas agendadas, escolher
+clubes/fontes ativos, e correr os scripts manualmente."""
 
 import subprocess
 import sys
@@ -10,7 +10,8 @@ from tkinter import ttk, scrolledtext
 import settings
 from config import BASE_DIR, LOG_DIR
 
-TASK_NAME = "NewsAI Pipeline"
+CLOUD_TASK_NAME = "NewsAI Pipeline"
+OJOGO_TASK_NAME = "NewsAI Ojogo Local"
 
 CLUB_LABELS = {"fc_porto": "FC Porto", "benfica": "Benfica", "sporting": "Sporting"}
 SOURCE_LABELS = {
@@ -29,36 +30,57 @@ class ControlPanel(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("NewsAI — Painel de Controlo")
-        self.geometry("540x640")
+        self.geometry("560x760")
         self.resizable(False, False)
 
         self.settings_data = settings.load()
         self.club_vars = {}
         self.source_vars = {}
         self.running = False
+        self.task_status_labels = {}
 
-        self._build_task_section()
+        self._build_task_section(
+            CLOUD_TASK_NAME,
+            "Tarefa agendada — pipeline completo na nuvem já corre via GitHub Actions; "
+            "esta tarefa local está desativada por defeito para não duplicar envios.",
+        )
+        self._build_task_section(
+            OJOGO_TASK_NAME,
+            "Tarefa agendada — só o ojogo.pt (a cada 15 min), porque este site bloqueia "
+            "pedidos vindos da nuvem. Corre neste PC e partilha os dados com a nuvem.",
+        )
         self._build_clubs_section()
         self._build_sources_section()
         self._build_run_section()
 
-        self._refresh_task_status()
+        self._refresh_all_task_statuses()
 
-    # --- Tarefa agendada ---
-    def _build_task_section(self):
-        frame = ttk.LabelFrame(self, text="Tarefa agendada (a cada 15 min)")
-        frame.pack(fill="x", padx=10, pady=8)
+    # --- Tarefas agendadas ---
+    def _build_task_section(self, task_name, description):
+        frame = ttk.LabelFrame(self, text=task_name)
+        frame.pack(fill="x", padx=10, pady=6)
 
-        self.task_status_label = ttk.Label(frame, text="A verificar...")
-        self.task_status_label.pack(side="left", padx=8, pady=8)
+        ttk.Label(frame, text=description, wraplength=460, justify="left").pack(
+            anchor="w", padx=8, pady=(6, 2)
+        )
 
-        ttk.Button(frame, text="Desativar", command=self._disable_task).pack(side="right", padx=4, pady=8)
-        ttk.Button(frame, text="Ativar", command=self._enable_task).pack(side="right", padx=4, pady=8)
+        row = ttk.Frame(frame)
+        row.pack(fill="x", padx=8, pady=(0, 8))
+        label = ttk.Label(row, text="A verificar...")
+        label.pack(side="left")
+        self.task_status_labels[task_name] = label
 
-    def _query_task_status(self) -> str:
+        ttk.Button(row, text="Desativar", command=lambda: self._disable_task(task_name)).pack(
+            side="right", padx=4
+        )
+        ttk.Button(row, text="Ativar", command=lambda: self._enable_task(task_name)).pack(
+            side="right", padx=4
+        )
+
+    def _query_task_status(self, task_name) -> str:
         try:
             result = subprocess.run(
-                ["schtasks", "/Query", "/TN", TASK_NAME, "/FO", "CSV", "/NH"],
+                ["schtasks", "/Query", "/TN", task_name, "/FO", "CSV", "/NH"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -70,22 +92,23 @@ class ControlPanel(tk.Tk):
         except Exception as e:
             return f"erro ao consultar ({e})"
 
-    def _refresh_task_status(self):
-        status = self._query_task_status()
-        self.task_status_label.config(text=f"Estado atual: {status}")
+    def _refresh_all_task_statuses(self):
+        for task_name, label in self.task_status_labels.items():
+            status = self._query_task_status(task_name)
+            label.config(text=f"Estado atual: {status}")
 
-    def _enable_task(self):
-        subprocess.run(["schtasks", "/Change", "/TN", TASK_NAME, "/ENABLE"], capture_output=True)
-        self._refresh_task_status()
+    def _enable_task(self, task_name):
+        subprocess.run(["schtasks", "/Change", "/TN", task_name, "/ENABLE"], capture_output=True)
+        self._refresh_all_task_statuses()
 
-    def _disable_task(self):
-        subprocess.run(["schtasks", "/Change", "/TN", TASK_NAME, "/DISABLE"], capture_output=True)
-        self._refresh_task_status()
+    def _disable_task(self, task_name):
+        subprocess.run(["schtasks", "/Change", "/TN", task_name, "/DISABLE"], capture_output=True)
+        self._refresh_all_task_statuses()
 
     # --- Clubes ---
     def _build_clubs_section(self):
         frame = ttk.LabelFrame(self, text="Clubes ativos")
-        frame.pack(fill="x", padx=10, pady=8)
+        frame.pack(fill="x", padx=10, pady=6)
         for club in settings.ALL_CLUBS:
             var = tk.BooleanVar(value=self.settings_data["clubs"].get(club, False))
             self.club_vars[club] = var
@@ -99,7 +122,7 @@ class ControlPanel(tk.Tk):
     # --- Fontes ---
     def _build_sources_section(self):
         frame = ttk.LabelFrame(self, text="Fontes ativas")
-        frame.pack(fill="x", padx=10, pady=8)
+        frame.pack(fill="x", padx=10, pady=6)
         for source in settings.ALL_SOURCES:
             var = tk.BooleanVar(value=self.settings_data["sources"].get(source, False))
             self.source_vars[source] = var
@@ -121,13 +144,21 @@ class ControlPanel(tk.Tk):
     # --- Execução manual ---
     def _build_run_section(self):
         frame = ttk.LabelFrame(self, text="Execução manual")
-        frame.pack(fill="both", expand=True, padx=10, pady=8)
+        frame.pack(fill="both", expand=True, padx=10, pady=6)
 
         button_row = ttk.Frame(frame)
         button_row.pack(fill="x", padx=8, pady=4)
-        self.run_button = ttk.Button(button_row, text="Correr agora", command=self._run_now)
-        self.run_button.pack(side="left")
-        ttk.Button(button_row, text="Abrir pasta de logs", command=self._open_logs_folder).pack(side="left", padx=8)
+        self.run_pipeline_button = ttk.Button(
+            button_row, text="Correr pipeline completo", command=lambda: self._run_now("main.py")
+        )
+        self.run_pipeline_button.pack(side="left")
+        self.run_ojogo_button = ttk.Button(
+            button_row, text="Correr só ojogo.pt", command=lambda: self._run_now("run_ojogo_local.py")
+        )
+        self.run_ojogo_button.pack(side="left", padx=8)
+        ttk.Button(button_row, text="Abrir pasta de logs", command=self._open_logs_folder).pack(
+            side="left", padx=8
+        )
 
         self.output_box = scrolledtext.ScrolledText(frame, height=16, state="disabled", wrap="word")
         self.output_box.pack(fill="both", expand=True, padx=8, pady=8)
@@ -138,22 +169,26 @@ class ControlPanel(tk.Tk):
         self.output_box.see("end")
         self.output_box.config(state="disabled")
 
-    def _run_now(self):
+    def _run_now(self, script_name):
         if self.running:
             return
         self.running = True
-        self.run_button.config(state="disabled", text="A correr...")
+        self.run_pipeline_button.config(state="disabled")
+        self.run_ojogo_button.config(state="disabled")
+        (self.run_pipeline_button if script_name == "main.py" else self.run_ojogo_button).config(
+            text="A correr..."
+        )
         self.output_box.config(state="normal")
         self.output_box.delete("1.0", "end")
         self.output_box.config(state="disabled")
 
-        thread = threading.Thread(target=self._run_pipeline_thread, daemon=True)
+        thread = threading.Thread(target=self._run_script_thread, args=(script_name,), daemon=True)
         thread.start()
 
-    def _run_pipeline_thread(self):
+    def _run_script_thread(self, script_name):
         try:
             process = subprocess.Popen(
-                [sys.executable, str(BASE_DIR / "main.py")],
+                [sys.executable, str(BASE_DIR / script_name)],
                 cwd=str(BASE_DIR),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -166,13 +201,14 @@ class ControlPanel(tk.Tk):
                 self.after(0, self._append_output, line)
             process.wait()
         except Exception as e:
-            self.after(0, self._append_output, f"\nErro ao correr o pipeline: {e}\n")
+            self.after(0, self._append_output, f"\nErro ao correr {script_name}: {e}\n")
         finally:
             self.after(0, self._on_run_finished)
 
     def _on_run_finished(self):
         self.running = False
-        self.run_button.config(state="normal", text="Correr agora")
+        self.run_pipeline_button.config(state="normal", text="Correr pipeline completo")
+        self.run_ojogo_button.config(state="normal", text="Correr só ojogo.pt")
 
     def _open_logs_folder(self):
         subprocess.run(["explorer", str(LOG_DIR)])
