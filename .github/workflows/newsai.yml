@@ -31,6 +31,12 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
+      - name: Configurar git em data/ (para o commit automático do estado)
+        working-directory: data
+        run: |
+          git config user.name "NewsAI Bot"
+          git config user.email "actions@github.com"
+
       - name: Correr o pipeline
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -39,12 +45,3 @@ jobs:
           TELETHON_API_HASH: ${{ secrets.TELETHON_API_HASH }}
           TELETHON_STRING_SESSION: ${{ secrets.TELETHON_STRING_SESSION }}
         run: python main.py
-
-      - name: Guardar estado no repositório privado de dados
-        working-directory: data
-        run: |
-          git config user.name "NewsAI Bot"
-          git config user.email "actions@github.com"
-          git add seen_articles.db recipients.json telegram_update_offset.txt
-          git diff --staged --quiet || git commit -m "Atualiza estado do pipeline [skip ci]"
-          git push

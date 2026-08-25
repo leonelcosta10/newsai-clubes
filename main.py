@@ -8,6 +8,7 @@ from config import CLUB_DISPLAY_NAMES, GEMINI_DELAY_SECONDS
 from logging_config import setup_logging
 from notifier.telegram_bot import discover_new_recipients, is_configured, send_club_digest
 from scrapers import abola, athletic, dimarzio, fabrizio_telegram, lequipe, marca, ojogo, record
+from storage import data_sync
 from storage.dedup import is_seen, mark_seen
 from summarizer.gemini_summarizer import is_configured as gemini_is_configured
 from summarizer.gemini_summarizer import summarize
@@ -29,6 +30,8 @@ SCRAPER_REGISTRY = {
 def run():
     setup_logging()
     logger.info("=== Início da execução ===")
+
+    data_sync.pull()
 
     active_clubs = settings.active_clubs()
     active_scrapers = [SCRAPER_REGISTRY[name] for name in settings.active_sources()]
@@ -78,6 +81,7 @@ def run():
             mark_seen(item.source, item.external_id, club=club, title=item.title, url=item.url)
             total_new += 1
 
+    data_sync.push("Atualiza estado do pipeline")
     logger.info("=== Fim da execução — %d notícias novas processadas ===", total_new)
 
 
