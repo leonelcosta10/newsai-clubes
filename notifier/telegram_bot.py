@@ -109,17 +109,30 @@ def discover_new_recipients() -> list[dict]:
     return newly_added
 
 
+def _impact_tag(score: int) -> str | None:
+    """Etiqueta editorial (estilo agência de notícias) a partir do nível 0-10.
+    10 é caso especial ("BOMBA"); rotina (0-2) não leva etiqueta nenhuma."""
+    if score >= 10:
+        return "BOMBA"
+    if score >= 9:
+        return "URGENTE"
+    if score >= 6:
+        return "DESTAQUE"
+    if score >= 3:
+        return "RELEVANTE"
+    return None
+
+
 def _format_item(item) -> str:
     title = html.escape(item.title)
     url = html.escape(item.url, quote=True)
-    lines = [f'▪️ <b><a href="{url}">{title}</a></b>']
-    if item.bombast_score is not None:
-        emoji = "🔥" if item.bombast_score >= 7 else "📌" if item.bombast_score >= 3 else "💤"
-        lines.append(f"{emoji} Nível bombástico: {item.bombast_score}/10")
+    tag = _impact_tag(item.bombast_score) if item.bombast_score is not None else None
+    prefix = f"[{tag}] " if tag else ""
+    lines = [f'▪️ <b>{prefix}<a href="{url}">{title}</a></b>']
     text = item.llm_summary or item.summary
     if text:
         lines.append(html.escape(text))
-    tag = "🔒 Premium" if item.is_paywalled else ""
+    premium_tag = "🔒 Premium" if item.is_paywalled else ""
     source_label = {
         "ojogo": "O Jogo",
         "abola": "A Bola",
@@ -131,8 +144,8 @@ def _format_item(item) -> str:
         "lequipe": "L'Équipe",
     }.get(item.source, item.source)
     footer = f"Fonte: {source_label}"
-    if tag:
-        footer += f" · {tag}"
+    if premium_tag:
+        footer += f" · {premium_tag}"
     lines.append(f"<i>{footer}</i>")
     return "\n".join(lines)
 
