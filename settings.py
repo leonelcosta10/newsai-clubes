@@ -11,7 +11,7 @@ from pathlib import Path
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 
 ALL_CLUBS = ["fc_porto", "benfica", "sporting"]
-ALL_SOURCES = ["ojogo", "abola", "record", "dimarzio", "fabrizio_telegram", "athletic", "marca", "lequipe"]
+ALL_SOURCES = ["ojogo", "abola", "record", "dimarzio", "fabrizio_telegram", "athletic", "marca", "lequipe", "footmercato"]
 
 DEFAULTS = {
     "clubs": {"fc_porto": True, "benfica": False, "sporting": False},

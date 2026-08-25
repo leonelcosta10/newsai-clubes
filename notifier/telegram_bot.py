@@ -142,6 +142,7 @@ def _format_item(item) -> str:
         "athletic": "The Athletic (David Ornstein)",
         "marca": "Marca",
         "lequipe": "L'Équipe",
+        "footmercato": "Foot Mercato",
     }.get(item.source, item.source)
     footer = f"Fonte: {source_label}"
     if premium_tag:

@@ -23,6 +23,7 @@ SOURCE_LABELS = {
     "athletic": "The Athletic — David Ornstein",
     "marca": "Marca (liga portuguesa)",
     "lequipe": "L'Équipe (liga portuguesa)",
+    "footmercato": "Foot Mercato (live transferências)",
 }
 
 
