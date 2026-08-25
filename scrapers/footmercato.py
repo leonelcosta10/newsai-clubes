@@ -1,21 +1,19 @@
 """Leitura do live blog de transferências do footmercato.net.
 
-A página "transferts-en-direct" é um único live blog (schema.org LiveBlogPosting)
-atualizado ao longo do dia, mas — ao contrário do "Mercado ao minuto" do
-ojogo.pt — cada atualização vem bem estruturada no JSON-LD, com o seu próprio
-título, corpo e data de publicação, por isso não sofre do mesmo problema de
-desalinhamento entre título e conteúdo.
+A página "transferts-en-direct" é um live blog atualizado ao longo do dia.
+Cada atualização ("brief") tem um id estável, uma data, título, corpo, e — o
+mais útil — os logótipos dos clubes envolvidos, com link para a página de
+cada clube (ex: /club/fc-porto/). Usa-se essa marcação editorial para saber
+a que clube(s) a notícia pertence, em vez de só palavras-chave — é mais
+fiável, já que é o próprio site a identificar os clubes da notícia.
 
-Não é segmentado por clube — aplica-se o filtro de palavras-chave a cada
-atualização, tal como no RSS do Di Marzio.
-
-Como as atualizações não têm URL/id próprio (só a página do live blog em si),
-usa-se um hash de data+título como identificador único para efeitos de dedup.
+Como rede de segurança, se uma atualização não tiver nenhum logo dos nossos
+3 clubes mas mencionar um deles no texto, o filtro de palavras-chave apanha-a
+também (útil para atualizações sem essa marcação).
 """
 
-import hashlib
-import json
 import logging
+import re
 
 from bs4 import BeautifulSoup
 
@@ -29,6 +27,15 @@ SOURCE_NAME = "footmercato"
 
 LIVE_URL = "https://www.footmercato.net/transferts-en-direct"
 
+# slug da página do clube no footmercato.net -> chave interna do clube
+CLUB_SLUG_MAP = {
+    "fc-porto": "fc_porto",
+    "sl-benfica": "benfica",
+    "sporting-clube-de-portugal": "sporting",
+}
+
+_CLUB_HREF_RE = re.compile(r"/club/([^/]+)/")
+
 
 def _fetch(session, url):
     try:
@@ -40,40 +47,52 @@ def _fetch(session, url):
         return None
 
 
-def _parse_updates(html: str) -> list[dict]:
-    updates = []
+def _clubs_from_logos(brief) -> set[str]:
+    clubs = set()
+    for a in brief.select("div.brief__logos a[href*='/club/']"):
+        match = _CLUB_HREF_RE.search(a["href"])
+        if match and match.group(1) in CLUB_SLUG_MAP:
+            clubs.add(CLUB_SLUG_MAP[match.group(1)])
+    return clubs
+
+
+def _parse_briefs(html: str) -> list[dict]:
+    briefs = []
     try:
         soup = BeautifulSoup(html, "lxml")
-        for script in soup.find_all("script", type="application/ld+json"):
-            if not script.string:
+        for brief in soup.select("div.brief[id]"):
+            title_el = brief.select_one("h2.brief__title")
+            if not title_el:
                 continue
-            try:
-                data = json.loads(script.string)
-            except json.JSONDecodeError:
+            title = title_el.get_text(strip=True)
+
+            body_el = brief.select_one("div.wysiwygContent")
+            paragraphs = body_el.find_all("p") if body_el else []
+            body = " ".join(p.get_text(" ", strip=True) for p in paragraphs)
+
+            time_el = brief.select_one("time[datetime]")
+            published_at = time_el.get("datetime") if time_el else None
+
+            clubs = _clubs_from_logos(brief)
+            if not clubs:
+                clubs = detect_clubs(f"{title} {body}")
+            if not clubs:
                 continue
-            candidates = data if isinstance(data, list) else [data]
-            for item in candidates:
-                if isinstance(item, dict) and item.get("@type") == "LiveBlogPosting":
-                    for update in item.get("liveBlogUpdate", []):
-                        title = update.get("headline")
-                        body = update.get("articleBody")
-                        published_at = update.get("datePublished")
-                        if not title or not body:
-                            continue
-                        external_id = hashlib.sha1(f"{published_at}|{title}".encode("utf-8")).hexdigest()[:16]
-                        updates.append(
-                            {
-                                "title": title,
-                                "body": body,
-                                "published_at": published_at,
-                                "external_id": external_id,
-                            }
-                        )
-        if not updates:
-            logger.warning("Nenhuma atualização encontrada em %s — verificar estrutura da página", LIVE_URL)
+
+            briefs.append(
+                {
+                    "external_id": brief["id"],
+                    "title": title,
+                    "body": body or None,
+                    "published_at": published_at,
+                    "clubs": clubs,
+                }
+            )
+        if not briefs:
+            logger.warning("Nenhuma atualização relevante encontrada em %s", LIVE_URL)
     except Exception:
         logger.exception("Falha ao parsear o live blog — a estrutura pode ter mudado")
-    return updates
+    return briefs
 
 
 def _collect_all() -> list[NewsItem]:
@@ -83,23 +102,19 @@ def _collect_all() -> list[NewsItem]:
         return []
 
     items = []
-    for update in _parse_updates(html):
-        text = f"{update['title']} {update['body']}"
-        clubs = detect_clubs(text)
-        if not clubs:
-            continue
-        for club in clubs:
+    for brief in _parse_briefs(html):
+        for club in brief["clubs"]:
             items.append(
                 NewsItem(
                     source=SOURCE_NAME,
-                    external_id=update["external_id"],
+                    external_id=brief["external_id"],
                     club=club,
-                    title=update["title"],
+                    title=brief["title"],
                     url=LIVE_URL,
-                    published_at=update["published_at"],
+                    published_at=brief["published_at"],
                     author="Foot Mercato",
                     summary=None,
-                    body=update["body"],
+                    body=brief["body"],
                     is_paywalled=False,
                 )
             )
