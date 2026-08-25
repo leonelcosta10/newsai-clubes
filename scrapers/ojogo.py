@@ -55,6 +55,11 @@ def _parse_listing(html: str) -> list[dict]:
                 # padrão inesperado no URL — ignora este item em vez de falhar tudo
                 logger.warning("URL de artigo sem ID numérico no fim, a ignorar: %s", href)
                 continue
+            if title.lower().startswith("mercado ao minuto"):
+                # live blog atualizado continuamente — o título na listagem muda ao
+                # longo do dia mas o URL é fixo, por isso um resumo feito num instante
+                # fica desalinhado do título assim que o blog for atualizado de novo
+                continue
             items.append({"title": title, "url": href, "article_id": article_id})
     except Exception:
         logger.exception("Falha ao parsear listagem — a estrutura HTML pode ter mudado")
