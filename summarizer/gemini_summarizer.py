@@ -3,6 +3,7 @@
 
 import json
 import logging
+import time
 
 from google import genai
 from google.genai import types
@@ -12,6 +13,9 @@ from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_MS
 logger = logging.getLogger(__name__)
 
 _client = None
+
+MAX_ATTEMPTS = 2
+RETRY_DELAY_SECONDS = 5
 
 SYSTEM_INSTRUCTION = """Analisas notícias de futebol sobre o FC Porto, Benfica ou Sporting, \
 para publicação como post no X (Twitter), e devolves um objeto JSON com dois campos: \
@@ -64,31 +68,47 @@ def _build_prompt(item) -> str:
     return "\n".join(parts)
 
 
+def _generate(item) -> dict | None:
+    client = _get_client()
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=_build_prompt(item),
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            max_output_tokens=400,
+            temperature=0.3,
+            thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
+            response_mime_type="application/json",
+            response_schema=RESPONSE_SCHEMA,
+        ),
+    )
+    data = json.loads(response.text)
+    summary = (data.get("summary") or "").strip()
+    score = data.get("bombast_score")
+    if not summary or not isinstance(score, int):
+        logger.warning("Resposta do Gemini incompleta para: %s — %r", item.title, data)
+        return None
+    return {"summary": summary, "bombast_score": max(0, min(10, score))}
+
+
 def summarize(item) -> dict | None:
-    """Devolve {"summary": str, "bombast_score": int} ou None se falhar/não configurado."""
+    """Devolve {"summary": str, "bombast_score": int} ou None se falhar/não configurado.
+    Tenta até MAX_ATTEMPTS vezes — os timeouts do Gemini (504) costumam ser passageiros
+    e resolvem-se numa segunda tentativa."""
     if not is_configured():
         return None
-    try:
-        client = _get_client()
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=_build_prompt(item),
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                max_output_tokens=400,
-                temperature=0.3,
-                thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
-                response_mime_type="application/json",
-                response_schema=RESPONSE_SCHEMA,
-            ),
-        )
-        data = json.loads(response.text)
-        summary = (data.get("summary") or "").strip()
-        score = data.get("bombast_score")
-        if not summary or not isinstance(score, int):
-            logger.warning("Resposta do Gemini incompleta para: %s — %r", item.title, data)
-            return None
-        return {"summary": summary, "bombast_score": max(0, min(10, score))}
-    except Exception:
-        logger.exception("Falha ao gerar resumo via Gemini para: %s", item.title)
-        return None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return _generate(item)
+        except Exception:
+            if attempt < MAX_ATTEMPTS:
+                logger.warning(
+                    "Falha ao gerar resumo via Gemini para: %s (tentativa %d/%d) — a repetir",
+                    item.title,
+                    attempt,
+                    MAX_ATTEMPTS,
+                )
+                time.sleep(RETRY_DELAY_SECONDS)
+            else:
+                logger.exception("Falha ao gerar resumo via Gemini para: %s", item.title)
+    return None
