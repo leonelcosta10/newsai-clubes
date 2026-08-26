@@ -24,6 +24,7 @@ SOURCE_LABELS = {
     "marca": "Marca (liga portuguesa)",
     "lequipe": "L'Équipe (liga portuguesa)",
     "footmercato": "Foot Mercato (live transferências)",
+    "gazzetta": "Gazzetta dello Sport (live mercato)",
 }
 
 

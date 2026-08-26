@@ -7,7 +7,7 @@ import settings
 from config import CLUB_DISPLAY_NAMES, GEMINI_DELAY_SECONDS, MIN_BOMBAST_SCORE_TO_SEND
 from logging_config import setup_logging
 from notifier.telegram_bot import discover_new_recipients, is_configured, send_club_digest
-from scrapers import abola, athletic, dimarzio, fabrizio_telegram, footmercato, lequipe, marca, ojogo, record
+from scrapers import abola, athletic, dimarzio, fabrizio_telegram, footmercato, gazzetta, lequipe, marca, ojogo, record
 from storage import data_sync
 from storage.dedup import is_seen, mark_seen
 from summarizer.gemini_summarizer import is_configured as gemini_is_configured
@@ -25,6 +25,7 @@ SCRAPER_REGISTRY = {
     "marca": marca,
     "lequipe": lequipe,
     "footmercato": footmercato,
+    "gazzetta": gazzetta,
 }
 
 
