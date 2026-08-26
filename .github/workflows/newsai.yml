@@ -2,7 +2,9 @@ name: NewsAI Pipeline
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # minutos desfasados (não :00/:15/:30/:45) para evitar os picos de
+    # concorrência do scheduler da GitHub e reduzir os atrasos
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch: {}
 
 concurrency:
