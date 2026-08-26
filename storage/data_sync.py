@@ -5,6 +5,7 @@ o pipeline na nuvem, evitando notícias duplicadas."""
 
 import logging
 import subprocess
+import sys
 
 from config import BASE_DIR
 
@@ -13,9 +14,14 @@ logger = logging.getLogger(__name__)
 DATA_DIR = BASE_DIR / "data"
 _TRACKED_FILES = ("seen_articles.db", "recipients.json", "telegram_update_offset.txt")
 
+# no Windows, cada chamada ao git.exe (aplicação de consola) a partir do pythonw.exe
+# (sem consola) faz o SO abrir brevemente uma janela — CREATE_NO_WINDOW suprime isso.
+# Não existe/não é necessário noutras plataformas (ex: Linux no GitHub Actions).
+_SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+
 
 def _git(*args) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=DATA_DIR, capture_output=True, text=True)
+    return subprocess.run(["git", *args], cwd=DATA_DIR, capture_output=True, text=True, **_SUBPROCESS_FLAGS)
 
 
 def pull():
