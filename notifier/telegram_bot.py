@@ -12,7 +12,6 @@ from notifier import recipients as recipients_store
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.telegram.org/bot{token}/{method}"
-MAX_MESSAGE_LENGTH = 4096
 SEND_DELAY_SECONDS = 1  # cortesia para não sermos rate-limited pela API do Telegram
 
 WELCOME_MESSAGE = (
@@ -127,7 +126,7 @@ def _format_item(item) -> str:
     title = html.escape(item.title)
     url = html.escape(item.url, quote=True)
     tag = _impact_tag(item.bombast_score) if item.bombast_score is not None else None
-    prefix = f"[{tag}] " if tag else ""
+    prefix = f"[{tag} · {item.bombast_score}/10] " if tag else ""
     lines = [f'▪️ <b>{prefix}<a href="{url}">{title}</a></b>']
     text = item.llm_summary or item.summary
     if text:
@@ -151,24 +150,9 @@ def _format_item(item) -> str:
     return "\n".join(lines)
 
 
-def _chunk_messages(header: str, item_blocks: list[str]) -> list[str]:
-    """Agrupa blocos de notícia em mensagens que não excedam o limite do Telegram."""
-    chunks = []
-    current = header
-    for block in item_blocks:
-        candidate = current + "\n\n" + block
-        if len(candidate) > MAX_MESSAGE_LENGTH:
-            chunks.append(current)
-            current = header + " (cont.)\n\n" + block
-        else:
-            current = candidate
-    chunks.append(current)
-    return chunks
-
-
 def send_club_digest(club_display_name: str, items: list) -> int:
-    """Envia as notícias de um clube, a todos os destinatários inscritos, agrupadas
-    numa ou mais mensagens por destinatário. Devolve quantas mensagens foram enviadas."""
+    """Envia as notícias de um clube, a todos os destinatários inscritos — uma
+    mensagem por notícia. Devolve quantas mensagens foram enviadas."""
     if not items:
         return 0
     if not is_configured():
@@ -181,8 +165,7 @@ def send_club_digest(club_display_name: str, items: list) -> int:
         return 0
 
     header = f"📰 <b>{html.escape(club_display_name)}</b>"
-    blocks = [_format_item(item) for item in items]
-    messages = _chunk_messages(header, blocks)
+    messages = [f"{header}\n\n{_format_item(item)}" for item in items]
 
     sent = 0
     for recipient in active_recipients:

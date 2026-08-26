@@ -10,7 +10,7 @@ import logging
 import time
 
 import settings
-from config import CLUB_DISPLAY_NAMES, GEMINI_DELAY_SECONDS
+from config import CLUB_DISPLAY_NAMES, GEMINI_DELAY_SECONDS, MIN_BOMBAST_SCORE_TO_SEND
 from logging_config import setup_logging
 from notifier.telegram_bot import discover_new_recipients, is_configured, send_club_digest
 from scrapers import ojogo
@@ -50,8 +50,15 @@ def run():
             if gemini_is_configured():
                 time.sleep(GEMINI_DELAY_SECONDS)
 
-        if new_items:
-            sent = send_club_digest(CLUB_DISPLAY_NAMES[club], new_items)
+        items_to_send = [
+            item for item in new_items if item.bombast_score is None or item.bombast_score >= MIN_BOMBAST_SCORE_TO_SEND
+        ]
+        skipped = len(new_items) - len(items_to_send)
+        if skipped:
+            logger.info("%d notícia(s) de rotina não enviada(s) (pontuação < %d)", skipped, MIN_BOMBAST_SCORE_TO_SEND)
+
+        if items_to_send:
+            sent = send_club_digest(CLUB_DISPLAY_NAMES[club], items_to_send)
             logger.info("%d mensagem(ns) enviada(s) para o Telegram (%s)", sent, CLUB_DISPLAY_NAMES[club])
 
         for item in new_items:
