@@ -126,6 +126,8 @@ def _format_item(item) -> str:
     title = html.escape(item.title)
     url = html.escape(item.url, quote=True)
     tag = _impact_tag(item.bombast_score) if item.bombast_score is not None else None
+    if not tag and item.is_transfer_market:
+        tag = "MERCADO"  # enviada por ser de mercado, mesmo com pontuação de rotina
     prefix = f"[{tag} · {item.bombast_score}/10] " if tag else ""
     lines = [f'▪️ <b>{prefix}<a href="{url}">{title}</a></b>']
     text = item.llm_summary or item.summary

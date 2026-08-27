@@ -1,5 +1,6 @@
 """Geração de resumos curtos, em estilo de post para X, e classificação de
-"nível bombástico" (0-10), usando o tier gratuito do Gemini."""
+"nível de importância" (0-10) e "é mercado de transferências", usando o tier
+gratuito do Gemini."""
 
 import json
 import logging
@@ -18,8 +19,8 @@ MAX_ATTEMPTS = 2
 RETRY_DELAY_SECONDS = 5
 
 SYSTEM_INSTRUCTION = """Analisas notícias de futebol sobre o FC Porto, Benfica ou Sporting, \
-para publicação como post no X (Twitter), e devolves um objeto JSON com dois campos: \
-"summary" e "bombast_score".
+para publicação como post no X (Twitter), e devolves um objeto JSON com três campos: \
+"summary", "bombast_score" e "is_transfer_market".
 
 Regras para "summary":
 - Português de Portugal, direto e informativo, sem clickbait.
@@ -28,12 +29,25 @@ Regras para "summary":
 - Não incluas hashtags nem emojis.
 - Não repitas o nome da fonte nem incluas o link — isso é adicionado à parte, depois.
 
-Regras para "bombast_score" (inteiro de 0 a 10, "nível de notícia bombástica"):
-- 0-2: rotina (opinião, análise tática, crónica normal de jogo, notas de imprensa).
-- 3-5: relevante mas não surpreendente (rumor de mercado, declarações normais, resultado esperado).
-- 6-8: notícia forte (transferência avançada/confirmada, declaração polémica, resultado surpreendente).
-- 9-10: verdadeira bomba (transferência de topo confirmada de última hora, saída/despedimento de \
-treinador, escândalo grave, decisão histórica).
+Regras para "is_transfer_market" (booleano):
+- true se a notícia for sobre mercado de transferências: rumores, negociações, transferências
+  oficializadas, empréstimos, renovações ou rescisões de contrato, situação contratual de
+  jogadores/staff.
+- false para tudo o resto — resultados, crónicas de jogo, análises táticas, declarações,
+  sorteios de competições, notícias de outras modalidades, etc.
+
+Regras para "bombast_score" (inteiro de 0 a 10, "nível de importância/urgência"):
+- 0-2: rotina — análise tática, opinião, crónica normal de jogo, declarações normais de
+  conferência de imprensa (mesmo que gerem algum debate), notas de imprensa.
+- 3-5: relevante mas não urgente — resultado dentro do esperado, declarações rotineiras.
+- 6-8: notícia de última hora ou importante — resultado surpreendente, sorteio de competição
+  europeia conhecido/adversários revelados, decisão relevante do clube, acontecimento fora
+  do comum.
+- 9-10: verdadeira bomba — declarações genuinamente chocantes ou escandalosas, saída
+  inesperada de treinador ou jogador-chave, escândalo grave, decisão histórica.
+- Só atribui pontuação alta (6+) a declarações se forem realmente chocantes ou escandalosas —
+  declarações normais de conferência de imprensa não passam de rotina/relevante, mesmo que
+  sejam "polémicas" no sentido de gerarem debate.
 - Usa só a informação fornecida para decidir — não exageres a pontuação por defeito."""
 
 RESPONSE_SCHEMA = {
@@ -41,8 +55,9 @@ RESPONSE_SCHEMA = {
     "properties": {
         "summary": {"type": "string"},
         "bombast_score": {"type": "integer", "minimum": 0, "maximum": 10},
+        "is_transfer_market": {"type": "boolean"},
     },
-    "required": ["summary", "bombast_score"],
+    "required": ["summary", "bombast_score", "is_transfer_market"],
 }
 
 
@@ -85,16 +100,21 @@ def _generate(item) -> dict | None:
     data = json.loads(response.text)
     summary = (data.get("summary") or "").strip()
     score = data.get("bombast_score")
-    if not summary or not isinstance(score, int):
+    is_transfer_market = data.get("is_transfer_market")
+    if not summary or not isinstance(score, int) or not isinstance(is_transfer_market, bool):
         logger.warning("Resposta do Gemini incompleta para: %s — %r", item.title, data)
         return None
-    return {"summary": summary, "bombast_score": max(0, min(10, score))}
+    return {
+        "summary": summary,
+        "bombast_score": max(0, min(10, score)),
+        "is_transfer_market": is_transfer_market,
+    }
 
 
 def summarize(item) -> dict | None:
-    """Devolve {"summary": str, "bombast_score": int} ou None se falhar/não configurado.
-    Tenta até MAX_ATTEMPTS vezes — os timeouts do Gemini (504) costumam ser passageiros
-    e resolvem-se numa segunda tentativa."""
+    """Devolve {"summary": str, "bombast_score": int, "is_transfer_market": bool} ou None se
+    falhar/não configurado. Tenta até MAX_ATTEMPTS vezes — os timeouts do Gemini (504) costumam
+    ser passageiros e resolvem-se numa segunda tentativa."""
     if not is_configured():
         return None
     for attempt in range(1, MAX_ATTEMPTS + 1):

@@ -47,15 +47,20 @@ def run():
             if result:
                 item.llm_summary = result["summary"]
                 item.bombast_score = result["bombast_score"]
+                item.is_transfer_market = result["is_transfer_market"]
             if gemini_is_configured():
                 time.sleep(GEMINI_DELAY_SECONDS)
 
         items_to_send = [
-            item for item in new_items if item.bombast_score is None or item.bombast_score >= MIN_BOMBAST_SCORE_TO_SEND
+            item
+            for item in new_items
+            if item.bombast_score is None or item.is_transfer_market or item.bombast_score >= MIN_BOMBAST_SCORE_TO_SEND
         ]
         skipped = len(new_items) - len(items_to_send)
         if skipped:
-            logger.info("%d notícia(s) de rotina não enviada(s) (pontuação < %d)", skipped, MIN_BOMBAST_SCORE_TO_SEND)
+            logger.info(
+                "%d notícia(s) não enviada(s) (fora do mercado e pontuação < %d)", skipped, MIN_BOMBAST_SCORE_TO_SEND
+            )
 
         if items_to_send:
             sent = send_club_digest(CLUB_DISPLAY_NAMES[club], items_to_send)

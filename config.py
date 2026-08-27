@@ -43,7 +43,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_TIMEOUT_MS = 20000
 GEMINI_DELAY_SECONDS = 4.5  # cortesia para não estourar os limites do tier gratuito
-MIN_BOMBAST_SCORE_TO_SEND = 3  # abaixo disto ("rotina") a notícia não é enviada, só marcada como vista
+MIN_BOMBAST_SCORE_TO_SEND = 6  # notícia de "última hora"/importante ou acima; abaixo só é
+# enviada se for de mercado de transferências (ver is_transfer_market) — outras ficam só
+# marcadas como vistas, sem envio
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 TELETHON_API_ID = os.getenv("TELETHON_API_ID")

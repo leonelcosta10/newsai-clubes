@@ -20,6 +20,7 @@ class NewsItem:
     raw_meta: dict = field(default_factory=dict)
     llm_summary: str | None = None  # resumo gerado pelo Gemini, preenchido antes do envio
     bombast_score: int | None = None  # 0-10, "nível de notícia bombástica" avaliado pelo Gemini
+    is_transfer_market: bool | None = None  # é sobre mercado de transferências? avaliado pelo Gemini
 
 
 def build_session() -> requests.Session:
