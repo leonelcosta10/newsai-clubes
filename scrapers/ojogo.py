@@ -11,6 +11,7 @@ import time
 from bs4 import BeautifulSoup
 
 from config import CRAWL_DELAY_SECONDS, REQUEST_TIMEOUT
+from filtering.keywords import detect_clubs
 from scrapers.base import NewsItem, build_session
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,10 @@ CLUB_TOPIC_URLS = {
     "benfica": "https://www.ojogo.pt/topico/benfica",
     "sporting": "https://www.ojogo.pt/topico/sporting",
 }
+
+# widget de "mais lidas"/ranking do site inteiro, por vezes embutido na página de
+# tópico do clube — mistura conteúdo de outras modalidades sem relação nenhuma
+_EXCLUDED_ANCESTOR_MARKER = "ranking-slider"
 
 
 def _fetch(session, url):
@@ -45,6 +50,11 @@ def _parse_listing(html: str) -> list[dict]:
     try:
         soup = BeautifulSoup(html, "lxml")
         for h2 in soup.select("h2[class*='Title']"):
+            if any(
+                _EXCLUDED_ANCESTOR_MARKER in " ".join(ancestor.get("class") or [])
+                for ancestor in h2.find_parents()
+            ):
+                continue  # dentro de um widget de "mais lidas" do site inteiro, não do clube
             a = h2.find_parent("a")
             if not a or not a.get("href"):
                 continue
@@ -133,6 +143,15 @@ def collect(club: str, limit: int = 10) -> list[NewsItem]:
         if article_html is None:
             continue
         meta = _parse_article_meta(article_html)
+
+        # rede de segurança: mesmo excluindo o widget de "mais lidas", confirma-se
+        # a relevância pelo título+resumo+corpo antes de aceitar o item — o resumo
+        # sozinho às vezes só diz "a equipa" sem nomear o clube explicitamente
+        relevance_text = f"{entry['title']} {meta.get('description') or ''} {meta.get('body') or ''}"
+        if club not in detect_clubs(relevance_text):
+            logger.info("A ignorar item sem relação aparente com %s: %s", club, entry["title"])
+            continue
+
         results.append(
             NewsItem(
                 source=SOURCE_NAME,
